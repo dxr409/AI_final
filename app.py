@@ -14,13 +14,13 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from data_loader import PRESETS, SupplyChainDataGenerator
-from graph_search import MultimodalNetwork
-from hmm_module import SimpleHMM, risk_to_state
-from map_view import render_route_map
-from mdp_planner import SimpleInventoryMDP
-from simulation_runner import format_route_mode, run_closed_loop
-from ui_components import inject_css, interactive_formula, sym
+from src.data_loader import PRESETS, SupplyChainDataGenerator
+from src.graph_search import MultimodalNetwork
+from src.hmm_module import SimpleHMM, risk_to_state
+from src.map_view import render_route_map
+from src.mdp_planner import SimpleInventoryMDP
+from src.simulation_runner import format_route_mode, run_closed_loop
+from src.ui_components import inject_css, interactive_formula, sym
 
 st.set_page_config(
     page_title="AI Supply Chain Advisor (Hormuz → Hamburg)",

@@ -11,18 +11,25 @@ An end-to-end, 100% offline decision-support application for **Jebel Ali (Dubai)
 ## 📁 Repository Structure
 ```
 supply_chain_advisory/
-├── data_loader.py            # Scenario generator (all_clear, tariff_surge, hormuz_blockage) & UI presets
-├── hmm_module.py             # Forward filtering algorithm & scalar risk mapping
-├── mdp_planner.py            # Bellman Value Iteration warehouse optimizer + Q-value breakdown
-├── graph_search.py           # 7-node Jebel Ali -> Hamburg multimodal network & admissible A* search
-├── simulation_runner.py      # Closed-loop AI vs baseline simulator & terminal presentation runner
-├── map_view.py               # Offline SVG map with coastlines, waypoints, and animated trailing lines
-├── ui_components.py          # Interactive formula explorer with synchronized variable highlighting
-├── app.py                    # Interactive Streamlit dashboard (offline)
-├── test_pipeline.py          # 5-suite automated verification tests
-├── MATH_DOCUMENTATION.md     # Mathematical equations and proofs
-├── STUDENT_DEFENSE_GUIDE.md  # Oral defense pitch, Q&A, and live demo script
-└── requirements.txt          # Python dependency manifest
+├── app.py                        # Interactive Streamlit dashboard (offline)
+├── requirements.txt              # Python dependency manifest
+├── .streamlit/
+│   └── config.toml               # Light theme configuration
+├── src/
+│   ├── __init__.py
+│   ├── data_loader.py            # Scenario generator & UI presets
+│   ├── hmm_module.py             # Forward filtering algorithm & scalar risk mapping
+│   ├── mdp_planner.py            # Bellman Value Iteration warehouse optimizer
+│   ├── graph_search.py           # 7-node Jebel Ali -> Hamburg network & admissible A*
+│   ├── simulation_runner.py      # Closed-loop AI vs baseline simulator & CLI runner
+│   ├── map_view.py               # Offline SVG map with animated trailing routes
+│   └── ui_components.py          # Interactive formula explorer with variable highlighting
+├── tests/
+│   └── test_pipeline.py          # 6-suite automated verification tests
+└── docs/
+    ├── MATH_DOCUMENTATION.md     # Mathematical equations and proofs
+    ├── STUDENT_DEFENSE_GUIDE.md  # Oral defense pitch, Q&A, and live demo script
+    └── EVALUATION_REPORT.md      # Experimental report (to be updated)
 ```
 
 ---
@@ -37,13 +44,13 @@ source .venv/bin/activate
 
 ### 1. Run Verification Tests
 ```bash
-python test_pipeline.py
+python tests/test_pipeline.py
 ```
-Validates HMM probability normalization & purity, MDP Bellman Q-value identities, A\* rerouting across all 5 regimes, heuristic admissibility ($h(n) \le h^*(n)$), and ground-truth closed-loop simulation.
+Validates HMM probability normalization & purity, MDP Bellman Q-value identities, A\* rerouting across all 5 regimes, tariff-timing sensitivity, heuristic admissibility ($h(n) \le h^*(n)$), and ground-truth closed-loop simulation.
 
 ### 2. Run Headless Terminal Simulation
 ```bash
-python simulation_runner.py
+python src/simulation_runner.py
 ```
 Prints the solved MDP policy table, A\* route selection across the 3 scenario presets, and 15-day AI-vs-Baseline benchmarks.
 

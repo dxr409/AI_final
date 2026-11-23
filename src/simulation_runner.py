@@ -10,13 +10,18 @@ Connects all three AI modules in a daily closed-loop simulation:
      reducing arrival rates only when the chosen route passes through chokepoints.
 """
 
+from pathlib import Path
+import sys
 from typing import List
 import pandas as pd
 
-from data_loader import PRESETS, SupplyChainDataGenerator
-from hmm_module import SimpleHMM, risk_to_state
-from mdp_planner import SimpleInventoryMDP
-from graph_search import MultimodalNetwork
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.data_loader import PRESETS, SupplyChainDataGenerator
+from src.hmm_module import SimpleHMM, risk_to_state
+from src.mdp_planner import SimpleInventoryMDP
+from src.graph_search import MultimodalNetwork
 
 
 def format_route_mode(modes: List[str]) -> str:

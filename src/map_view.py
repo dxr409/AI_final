@@ -11,7 +11,7 @@ Renders a completely offline, self-contained HTML/SVG world map with:
 
 import html
 from typing import Dict, List, Tuple
-from graph_search import Edge, MultimodalNetwork
+from src.graph_search import Edge, MultimodalNetwork
 
 LonLat = Tuple[float, float]
 

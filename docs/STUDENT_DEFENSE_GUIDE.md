@@ -93,8 +93,8 @@ Use this guide to prepare for your presentation and oral defense.
 
 ### Terminal Demo
 ```bash
-python test_pipeline.py
-python simulation_runner.py
+python tests/test_pipeline.py
+python src/simulation_runner.py
 ```
 
 ### Interactive Dashboard Demo (`streamlit run app.py`)

@@ -10,12 +10,16 @@ and closed-loop ground-truth fulfillment:
   5. Closed-loop simulation using TRUE ground-truth corridor states.
 """
 
+from pathlib import Path
+import sys
 import numpy as np
 
-from hmm_module import SimpleHMM
-from mdp_planner import SimpleInventoryMDP
-from graph_search import MultimodalNetwork
-from simulation_runner import run_closed_loop
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.hmm_module import SimpleHMM
+from src.mdp_planner import SimpleInventoryMDP
+from src.graph_search import MultimodalNetwork
+from src.simulation_runner import run_closed_loop
 
 
 def test_hmm():
