@@ -1,7 +1,7 @@
 # Mathematical Foundations (Simplified Guide)
-## Supply Chain Vulnerability & Tariff Disruption Advisory
+## Supply Chain Vulnerability & Tariff Disruption Advisory (Jebel Ali → Hamburg)
 
-This document explains the mathematical formulas used in this project in clear, simple steps that any student or teacher can easily follow.
+This document explains the mathematical formulas implemented in this project clearly and concisely.
 
 ---
 
@@ -9,12 +9,12 @@ This document explains the mathematical formulas used in this project in clear, 
 **Course Topic: Probabilistic Reasoning / Temporal Models**
 
 ### What It Does
-We want to guess what state the world is in, even though we cannot observe it directly.
+We want to infer the hidden state of the shipping corridor from noisy daily operational reports.
 
 - **3 Hidden States ($S$)**:
   - $s_0$: Normal
-  - $s_1$: Congestion (Port Delays)
-  - $s_2$: Crisis (Tariff / Canal Shock)
+  - $s_1$: Congestion (Port / Customs Delays)
+  - $s_2$: Crisis (Strait of Hormuz / Chokepoint Shock)
 
 - **3 Observations ($Y$)**:
   - $y_0$: Cheap & On-Time
@@ -22,22 +22,18 @@ We want to guess what state the world is in, even though we cannot observe it di
   - $y_2$: Expensive & Stuck
 
 ### The Two Matrices
-1. **Transition Matrix $A$ (How tomorrow changes from today)**:
+1. **Transition Matrix $A$**:
    $$A_{i, j} = P(S_{t+1} = s_j \mid S_t = s_i)$$
-   Example: If today is Normal, there is an 85% chance tomorrow remains Normal.
-
-2. **Emission Matrix $B$ (What we see in each state)**:
+2. **Emission Matrix $B$**:
    $$B_{j, k} = P(Y_t = y_k \mid S_t = s_j)$$
-   Example: If the world is in Crisis, there is a 70% chance we observe "Expensive & Stuck".
 
-### The Forward Filtering Formula (2 Simple Steps)
-Every time we get a new observation $Y_t$:
-1. **Prediction**:
-   $$\text{Predicted State} = \text{Belief}_{t-1} \times A$$
-2. **Measurement Update & Normalization**:
-   $$\text{Belief}_t = \frac{\text{Predicted State} \times B[:, Y_t]}{\text{Sum of all probabilities}}$$
-
-The resulting vector $[\text{P(Normal)}, \text{P(Congestion)}, \text{P(Crisis)}]$ always sums up to $1.0$ (100%).
+### Forward Filtering Step
+For each new daily observation $y_t$:
+1. **Predict**: $\hat{b}_t(j) = \sum_i b_{t-1}(i) \cdot A_{i,j}$
+2. **Update & Normalize**:
+   $$b_t(j) = \frac{B[j, y_t] \cdot \hat{b}_t(j)}{Z}, \quad Z = \sum_{k=0}^{2} B[k, y_t] \cdot \hat{b}_t(k)$$
+3. **Scalar Disruption Risk ($p$) passed to A\***:
+   $$p = 0.4 \cdot b_t(\text{Congestion}) + 1.0 \cdot b_t(\text{Crisis})$$
 
 ---
 
@@ -45,47 +41,36 @@ The resulting vector $[\text{P(Normal)}, \text{P(Congestion)}, \text{P(Crisis)}]
 **Course Topic: Sequential Decision-Making under Uncertainty**
 
 ### What It Does
-Decides how many boxes of laptops to order for a warehouse each day.
+Decides how many boxes of laptops (`0, 2, 4, or 6`) to order each day for a warehouse with capacity $I_{\max} = 8$ and daily demand $D = 2$ boxes.
 
-- **State**: $(\text{Inventory}, \text{Risk State})$
-  - $\text{Inventory} \in \{0, 1, 2, \dots, 8\}$ boxes.
-  - $\text{Risk State} \in \{\text{Normal}, \text{Congestion}, \text{Crisis}\}$ (from the HMM).
-- **Actions**: Order $0, 2, 4,$ or $6$ boxes.
-- **Customer Demand**: Customers buy $2$ boxes every day.
+- **State**: $(I, s)$ where $I \in \{0, \dots, 8\}$ and $s \in \{\text{Normal}, \text{Congestion}, \text{Crisis}\}$.
+- **Arrival Success along Chokepoints**: $100\%$ in Normal, $50\%$ in Congestion, $25\%$ in Crisis.
+- **Known Policy Parameter**: Import tariff surcharge $\tau$ (USD/box) applies to every ordered box in all states.
 
-### Costs to Minimize
-$$\text{Cost} = \text{Order Cost} + \text{Holding Cost} + \text{Stockout Penalty} + \text{Tariff Fee}$$
-- Order Cost = $\$4 \times \text{boxes ordered}$
-- Holding Cost = $\$1 \times \text{unsold boxes left in warehouse}$
-- Stockout Penalty = $\$30 \times \text{customers turned away if warehouse is empty!}$
-- Tariff Fee = $\$4 \times \text{boxes ordered}$ (applied only in Crisis state)
+### Immediate Cost & Bellman Optimality Equation
+Let $\text{arrived} = \text{round}(a \cdot \text{rate}(s))$, $\text{sold} = \min(2, I + \text{arrived})$, $\text{short} = 2 - \text{sold}$, and $I' = \min(8, I + \text{arrived} - \text{sold})$:
+$$Q(I, s, a) = (c + \tau)\,a + c_h\,I' + c_{so}\,\text{short} + \gamma \sum_{s'=0}^{2} P(s' \mid s)\,V(I', s')$$
+where $c = \$4$, $c_h = \$1$, $c_{so} = \$30$, and $\gamma = 0.90$. Value Iteration updates $V(I, s) \leftarrow \min_a Q(I, s, a)$ until convergence ($\Delta < 10^{-3}$).
 
-### Bellman Value Iteration Formula
-$$\text{Total Value}(s) = \min_{a} \Big[ \text{Immediate Cost}(s, a) + 0.90 \times \text{Expected Future Cost}(\text{next } s) \Big]$$
-- We start with all values at 0.
-- We update the table for every inventory level and state until the numbers stop changing (convergence).
-- The action that gives the smallest cost becomes our **optimal policy** $\pi^*(I, S)$.
+### Urgency Score Passed to A\*
+$$U(I) = \begin{cases} 1.0 & I = 0 \\ 0.7 & I = 1 \\ 0.4 & I = 2 \\ 0.0 & I \ge 3 \end{cases}$$
 
 ---
 
-## 3. Algorithm 3: Dynamic A* Search
+## 3. Algorithm 3: Dynamic A\* Search
 **Course Topic: Classical Search & Heuristics**
 
-### What It Does
-Finds the cheapest route from **Shanghai** to **Hamburg** across 4 multimodal corridor choices:
-1. **Sea via Suez Canal**: Very cheap (\$100), but takes 20 days and passes through the vulnerable Suez Canal.
-2. **Sea via Cape of Good Hope**: Cheap (\$160), takes 30 days, but completely avoids the Suez Canal.
-3. **Express Train**: Medium price (\$200), fast (10 days), travels overland.
-4. **Air Cargo**: Expensive (\$400), ultra-fast (2 days).
+### Multimodal Network (7 Nodes, 5 Routes: Jebel Ali → Hamburg)
+1. **Sea via Hormuz + Suez**: $\$110$ base, $18$ days *(risk: Hormuz $r=3.0$, Red Sea $r=2.0$)*
+2. **Sea via Hormuz + Cape**: $\$185$ base, $31$ days *(risk: Hormuz $r=3.0$)*
+3. **Truck to Salalah + Sea via Suez**: $\$140$ base, $18$ days *(bypasses Hormuz; Red Sea $r=2.0$)*
+4. **Truck to Salalah + Sea via Cape**: $\$210$ base, $30$ days *(bypasses Hormuz & Suez, $r=0$)*
+5. **Air Cargo from Dubai**: $\$300$ base, $1.5$ days *(zero chokepoint risk, $r=0$)*
 
-### The Dynamic Cost Formula (Connecting HMM + MDP to A*)
-$$\text{Edge Cost} = \text{Base Cost} + \text{Disruption Penalty} + \text{Urgency Penalty}$$
-- **Disruption Penalty** = $\text{Base Cost} \times \text{HMM Disruption Probability} \times \text{Canal Risk Factor}$
-  *(If HMM detects high crisis probability, the Suez route becomes expensive!)*
-- **Urgency Penalty** = $\text{MDP Urgency Score} \times 12.0 \times \text{Transit Days}$
-  *(If MDP detects inventory is 0, slow routes with 20-30 days are heavily penalized!)*
+### Dynamic Edge Cost Formula
+$$\text{cost}(e) = b + b \cdot \kappa \cdot p \cdot r + \beta \cdot U \cdot d + \theta \cdot \tau \cdot d$$
+with disruption sensitivity $\kappa = 1.5$, time urgency penalty $\beta = \$12\text{/day}$, and tariff-timing exposure $\theta = 0.4\text{ per USD/day}$ ($\approx 8\text{-box shipment} \times 5\%\text{/day}$ chance a pending tariff hike hits before customs clearance — the real-world "front-loading" effect that shifts cargo toward faster corridors or air freight when tariffs rise).
 
-### The A* Heuristic
-$$h(n) = \text{Straight Line Distance to Hamburg} \times 8.0$$
-- **Admissibility**: Because a straight line is the shortest possible path between two points, $h(n)$ **never overestimates** the real cost ($h(n) \le h^*(n)$).
-- Therefore, A* is mathematically guaranteed to find the true optimal route.
+### Provably Admissible & Consistent Heuristic
+$$h(n) = c_{\min} \cdot \text{haversine\_km}(n, \text{Hamburg}), \quad c_{\min} = \min_{e \in E} \frac{b(e)}{\text{haversine\_km}(e.u, e.v)}$$
+Because all penalties are non-negative ($\text{cost}(u,v) \ge b(u,v) \ge c_{\min} \cdot \text{dist}(u,v)$ for $p, U, \tau \ge 0$) and great-circle distance satisfies the spherical triangle inequality, $h(u) \le \text{cost}(u,v) + h(v)$ (consistent) and $h(n) \le h^*(n)$ (admissible) for every node and every $(p, U, \tau)$.

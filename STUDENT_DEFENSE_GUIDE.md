@@ -1,121 +1,108 @@
 # Student Oral Defense & Presentation Guide
 ## AI Fundamentals Course Project
 
-Use this guide to prepare for your presentation and oral exam with your teacher. Everything is explained in plain English with simple analogies and word-for-word answers you can say out loud.
+Use this guide to prepare for your presentation and oral defense.
 
 ---
 
 ## 1. The 30-Second Elevator Pitch
-> *"Professor, our project solves a realistic problem: imagine you run a company in Europe that imports laptops from Asia.*  
-> *When shipping canals get blocked or governments impose tariffs, you face three challenges:*  
-> *1. You can't see the disruption directly, so you must **infer the hidden risk** from noisy delay and price reports — we use a **Hidden Markov Model (HMM)**.*  
-> *2. You must decide **how many boxes to order** each day so your warehouse doesn't run out of stock — we use a **Markov Decision Process (MDP)** solved with Value Iteration.*  
-> *3. You must **dynamically route the cargo** (Ship, Train, or Airplane) from Shanghai to Hamburg — we use **A\* Search** where edge costs dynamically update based on the HMM risk and the MDP warehouse urgency.*  
-> *Instead of separate toy scripts, the output of one algorithm directly feeds into the next."*
+> *"Professor, our project solves a realistic logistics crisis: imagine a European electronics importer shipping laptops from **Jebel Ali (Dubai)** in the Persian Gulf to **Hamburg, Germany**.*  
+> *When the **Strait of Hormuz** faces disruption risk or governments raise import tariffs, we face three tightly coupled challenges:*  
+> *1. We cannot observe the true corridor state directly, so a **Hidden Markov Model (HMM)** filters noisy daily rate and delay signals into a disruption probability $p$.*  
+> *2. An **MDP** solved via Bellman Value Iteration decides how many boxes to reorder under known tariff surcharges and calculates warehouse stockout urgency $U$.*  
+> *3. **Dynamic A\* Search** picks the optimal multimodal route—sailing via Hormuz & Suez, trucking overland around Hormuz to Salalah (Oman), diverting around the Cape of Good Hope, or escalating to Dubai Air Cargo—using edge costs driven directly by HMM risk $p$ and MDP urgency $U$."*
 
 ---
 
-## 2. The 3 Algorithms Explained in Plain English
+## 2. The 3 Algorithms in Plain English
 
 ### Algorithm 1: Hidden Markov Model (HMM)
 - **Course Topic**: Probabilistic Reasoning / Temporal Models
-- **In simple words**: It's a "risk detector".
-- **The intuition**: We can't see what's happening at sea. We only see reports: "Cheap & On-Time", "Moderate Delay", or "Expensive & Stuck". The HMM keeps a probability belief vector `[P(Normal), P(Congestion), P(Crisis)]` and updates it every day using the **Forward Algorithm**.
-- **How to explain the math**:  
-  *"It's just two steps: first, multiply yesterday's belief by the Transition Matrix A to predict today's state. Second, multiply by the Emission Matrix B for what we observed, and divide by the sum so the percentages add up to 100%."*
+- **Role**: Corridor risk estimator (`hmm_module.py`).
+- **How it works**: Updates `[P(Normal), P(Congestion), P(Crisis)]` every day via Forward filtering (`predicted = b_{t-1} @ A`, multiply by emission likelihood `B[:, obs]`, normalize by `Z`). Outputs scalar risk `p = 0.4·P(Congestion) + 1.0·P(Crisis)`.
 
 ### Algorithm 2: Markov Decision Process (MDP)
 - **Course Topic**: Sequential Decision-Making under Uncertainty
-- **In simple words**: It's an "order quantity planner".
-- **The intuition**: You have a warehouse with 0 to 8 boxes. Customers buy 2 boxes each day. If your warehouse is empty, you pay a steep \$30 stockout penalty. If you order too much, you pay \$1 storage fee. If a crisis happens, shipments might get stuck at customs.
-- **How it solves it**:  
-  *"We use Bellman Value Iteration. For every warehouse level (0 to 8 boxes) and every risk state (Normal, Congestion, Crisis), we find the order quantity (0, 2, 4, or 6 boxes) that minimizes: Today's Cost + (0.90 × Tomorrow's Expected Future Cost). The resulting table tells the manager exactly what to do."*
+- **Role**: Optimal inventory replenishment (`mdp_planner.py`).
+- **How it works**: Solves Bellman Value Iteration over `9 × 3 = 27` `(Inventory, RiskState)` states with actions `{0, 2, 4, 6}` boxes, wholesale cost `$4`, known tariff `τ`, holding fee `$1`, stockout penalty `$30`, and discount `γ = 0.90`. Outputs order quantity and stockout urgency `U` (`1.0` at 0 stock down to `0.0` at ≥3 stock).
 
-### Algorithm 3: Dynamic A* Search
+### Algorithm 3: Dynamic A\* Search
 - **Course Topic**: Classical Search & Heuristics
-- **In simple words**: It's a "smart GPS delivery router".
-- **The choices**:
-  - **Suez Canal (Sea)**: Cheapest (\$100), but takes 20 days and passes through the vulnerable Suez Canal.
-  - **Cape Route (Sea)**: Safe detour around Africa (\$160), but takes 30 days.
-  - **Trans-Asia Rail**: Train across Asia (\$200), fast (10 days), bypasses sea canals completely.
-  - **Air Cargo**: Airplane (\$400), ultra-fast (2 days).
-- **How it connects to HMM & MDP**:  
-  $$\text{Edge Cost} = \text{Base Cost} + (\text{HMM Disruption Risk} \times \text{Risk Factor}) + (\text{MDP Urgency Score} \times 12 \times \text{Days})$$
-  - If HMM detects that Suez is blocked $\to$ Suez becomes expensive $\to$ A\* switches to the **Cape Sea Detour** or **Rail**.
-  - If MDP detects the warehouse has 0 stock (high urgency) $\to$ Slow 20-30 day ships get heavily penalized $\to$ A\* switches to **Express Train** or **Air Cargo**!
+- **Role**: Multimodal route planner (`graph_search.py`).
+- **The 5 Route Choices (Jebel Ali → Hamburg)**:
+  1. **Sea via Hormuz + Suez**: `$110` base, `18 days` (passes Hormuz + Red Sea).
+  2. **Sea via Hormuz + Cape**: `$185` base, `31 days` (passes Hormuz).
+  3. **Truck to Salalah + Sea via Suez**: `$140` base, `18 days` (overland truck bypasses Hormuz).
+  4. **Truck to Salalah + Sea via Cape**: `$210` base, `30 days` (bypasses both Hormuz & Suez).
+  5. **Air Cargo from Dubai**: `$300` base, `1.5 days` (fastest, zero maritime chokepoint risk).
+- **Dynamic Edge Cost**:
+  $$\text{cost}(e) = b + b \cdot 1.5 \cdot p \cdot r + 12 \cdot U \cdot d + 0.4 \cdot \tau \cdot d$$
 
 ---
 
-## 3. How the 3 Algorithms Talk to Each Other (The Pipeline)
-
+## 3. Pipeline Architecture
 ```
-[Daily Operational Report: "Expensive & Stuck"]
-                      │
-                      ▼
-        ┌───────────────────────────┐
-        │  1. HMM (hmm_module.py)   │
-        │  Calculates Disruption    │
-        │  Risk Probability: 85%    │
-        └─────────────┬─────────────┘
-                      │
-        ┌─────────────┴─────────────┐
-        ▼                           ▼
-┌───────────────────────────┐   ┌───────────────────────────┐
-│  2. MDP (mdp_planner.py)  │   │ 3. A* (graph_search.py)   │
-│  State: (0 boxes, Crisis) │   │ Dynamic Edge Costs:       │
-│  Action: Order 0 boxes    │   │ • Suez penalized by HMM   │
-│  Urgency Score: 100%      │──▶│ • Days penalized by MDP   │
-└───────────────────────────┘   └─────────────┬─────────────┘
-                                              │
-                                              ▼
-                                 [A* Selects: EXPRESS TRAIN]
-                                 Avoids blocked canal & arrives
-                                 in 10 days instead of 30!
+[Daily Observation: "Expensive & Stuck"]
+                  │
+                  ▼
+     ┌─────────────────────────┐
+     │ 1. HMM (hmm_module.py)  │
+     │ Infers state & risk p   │
+     └────────────┬────────────┘
+                  │
+      ┌───────────┴───────────┐
+      ▼                       ▼
+┌───────────────────┐   ┌───────────────────────────┐
+│ 2. MDP            │   │ 3. Dynamic A*             │
+│ (mdp_planner.py)  │   │ (graph_search.py)         │
+│ Picks order qty & │──▶│ Edge costs use p (HMM)    │
+│ urgency U(stock)  │   │ and urgency U (MDP)       │
+└───────────────────┘   └─────────────┬─────────────┘
+                                      ▼
+                     [Selects Optimal Multimodal Route]
 ```
 
 ---
 
-## 4. Top 5 Questions Your Teacher Will Ask (And What to Answer)
+## 4. Top 5 Teacher Questions & Answers
 
-### Q1: *"Why did you use an HMM instead of just checking if the delay was high today?"*
-> **Answer**: *"Because a single high delay reading could just be noisy random luck (like a minor rainstorm). An HMM remembers past history through the temporal transition matrix $A$. It only transitions to the 'Crisis' state if delays stay consistently high over multiple days, preventing our supply chain from overreacting to single noisy outliers."*
+### Q1: *"Why use an HMM instead of a simple threshold on today's delay?"*
+> *"A single bad reading could just be random noise. The HMM remembers prior beliefs through transition matrix $A$, so it shifts smoothly into Congestion or Crisis only when signals persist across multiple days."*
 
-### Q2: *"In the MDP, why Value Iteration instead of a simple rule like 'always order 2 boxes'?"*
-> **Answer**: *"A simple rule cannot adapt to shipping disruptions. When ports are congested and delivery success drops from 100% to 50%, our MDP automatically increases order quantities to build a safety buffer. But when a tariff crisis hits with extra surcharges, our MDP automatically cuts orders to avoid expensive tariff penalties. Value Iteration mathematically guarantees the cost-minimal policy under these uncertain transition probabilities."*
+### Q2: *"Why solve an MDP with Value Iteration instead of a fixed reorder rule?"*
+> *"A fixed rule cannot adapt simultaneously to customs tariffs and chokepoint arrival drops. Bellman Value Iteration automatically balances `$30` stockout penalties against `$1` holding fees and known tariff surcharges across uncertain future transitions."*
 
-### Q3: *"What is the state space of your MDP?"*
-> **Answer**: *"The state is a pair: `(Current Warehouse Inventory, Risk State)`. Inventory ranges from 0 to 8 boxes, and the Risk State is one of 3 states from the HMM: Normal, Congestion, or Crisis. That gives $9 \times 3 = 27$ total states. For each state, the algorithm chooses an action from `[0, 2, 4, 6]` boxes."*
+### Q3: *"What is your MDP state and action space?"*
+> *"Each state is a pair `(Inventory, RiskState)` with `Inventory ∈ {0..8}` and `RiskState ∈ {Normal, Congestion, Crisis}`, giving `27` total states. Actions are `{0, 2, 4, 6}` boxes."*
 
-### Q4: *"In A*, what is your heuristic function $h(n)$ and is it admissible?"*
-> **Answer**: *"Yes, professor. The heuristic $h(n)$ is the straight-line Euclidean distance from the current node to Hamburg, multiplied by a scaling factor of 8.0. Because a straight line is the shortest possible path in Euclidean geometry, $h(n)$ will never overestimate the true remaining cost ($h(n) \le h^*(n)$). This makes it admissible, which guarantees that A\* will find the true optimal route."*
+### Q4: *"What is your A\* heuristic $h(n)$ and why is it admissible?"*
+> *"Our heuristic is `h(n) = c_min × haversine_km(n, Hamburg)`, where `c_min` is the minimum base cost per kilometer across all edges in the network. Because disruption and urgency penalties are always non-negative, every edge costs at least `c_min × distance(u, v)`, and by the spherical triangle inequality great-circle distance never overestimates path distance. Therefore `h(n) <= h*(n)` (admissible) and `h(u) <= cost(u, v) + h(v)` (consistent) for every node and every `(p, U)`—which you can also verify live inside the Calculations tab."*
 
-### Q5: *"Can you show me where the three algorithms are actually connected in code?"*
-> **Answer**: *"Yes, in `simulation_runner.py` inside the main loop:
-> - Line 66: `risk_prob = hmm.get_disruption_probability()` (HMM gives risk)
-> - Line 70: `order_qty = policy[current_inv, state]` and `urgency = mdp.get_urgency_score(current_inv)` (MDP gives urgency)
-> - Line 74: `network.a_star_search(..., disruption_prob=risk_prob, urgency_score=urgency)` (A\* takes both inputs as parameters!)"*
+### Q5: *"Where are the three algorithms actually connected in code?"*
+> *"In `simulation_runner.py` inside `run_closed_loop`:*
+> - *Lines 68–70: `hmm.update_belief(obs)` computes `p_risk` and `inferred_s`.*
+> - *Lines 73–75: `mdp.get_urgency_score(stock)` computes `urgency` and `policy[stock, inferred_s]` selects `order`.*
+> - *Lines 76–82: `network.a_star_search(..., disruption_prob=p_risk, urgency_score=urgency, tariff_per_box=tariff)` feeds all inputs directly into A\*."*
+
+### Q6: *"How does the import tariff affect routing in A\*?"*
+> *"When a tariff surge looms, every extra day at sea increases the chance that goods clear customs after the new tariff takes effect (known as front-loading). We model that expected tariff-timing exposure as `0.4 × τ × transit_days`. Under Hormuz Blockage, raising the tariff from `$2` to `$8` causes the 30-day Cape detour's tariff exposure (`$96`) to outweigh Air Cargo's base premium, flipping A\* cleanly to Dubai Air Cargo."*
 
 ---
 
-## 5. Live Demonstration Script for Class
+## 5. Live Demonstration Script
 
-### Option A: Running from the Terminal (Clean & Fast)
+### Terminal Demo
 ```bash
-python3 simulation_runner.py
+python test_pipeline.py
+python simulation_runner.py
 ```
-1. Point to **Step 1**: Show the printed MDP policy table. Explain: *"Look at row 0 (empty warehouse): in Normal state it orders 2 boxes, in Congestion it orders 4 boxes, and in Crisis it orders 0."*
-2. Point to **Step 2**: Show the 3 scenario comparisons. Explain: *"Look how A\* picks Suez Canal under zero risk, shifts to Cape of Good Hope when Suez is blocked, and shifts to Train when the warehouse is empty!"*
-3. Point to **Step 3**: Walk through the 12-day simulation table.
 
-### Option B: Running the Streamlit Web Dashboard (Visual & Interactive)
-```bash
-./.venv/bin/streamlit run app.py
-```
-1. Open `http://localhost:8501`.
-2. Go to **Tab 1 ("Interactive A\* Map & Rerouting")**.
-3. Move the **Corridor Disruption Risk** slider from 0% to 90%:
-   - Watch the red line on the map switch from **Suez Canal (Blue)** to **Cape of Good Hope (Detour)**.
-4. Move the **Warehouse Stockout Urgency** slider up to 100%:
-   - Watch the route switch to **Express Train (Orange)** or **Air Cargo (Green)**.
-5. Go to **Tab 2** to show the MDP policy table and explain why the numbers make business sense.
-
+### Interactive Dashboard Demo (`streamlit run app.py`)
+1. Open `http://localhost:8501` on **Tab 1 (Route Map)**.
+2. Click the **3 Quick Scenario buttons** one by one:
+   - **All Clear** (`5%` risk, stock `5`, tariff `$2`) → **Sea via Hormuz + Suez** (`18 days`).
+   - **Tariff Surge** (`40%` risk, stock `3`, tariff `$12`) → **Truck to Salalah + Sea via Suez** (bypasses Hormuz).
+   - **Hormuz Blockage** (`90%` risk, stock `3`, tariff `$2`) → **Truck to Salalah + Sea via Cape** (bypasses both Hormuz & Suez).
+3. On **Hormuz Blockage**, drag the **Import Tariff** slider from `2` to `8`: the route flips from **Cape** to **Air Cargo from Dubai**! (Similarly, dragging **Warehouse Stock** down to `0` also escalates to **Air Cargo**.)
+4. Open **Tab 2 (Calculations)** and hover symbols like `p`, `U`, `tau`, or `b` to show the live substituted numbers and explanation cards lighting up together.
+5. Open **Tab 4 (Simulation & Results)** to compare **Integrated AI vs Static Baseline** stockouts and costs over 15 days.

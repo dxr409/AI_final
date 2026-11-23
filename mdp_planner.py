@@ -3,143 +3,145 @@ mdp_planner.py - Markov Decision Process (MDP) Inventory Optimizer
 ==================================================================
 Topic: Sequential Decision-Making under Uncertainty
 
-WHAT THIS DOES IN SIMPLE WORDS:
-  You manage a warehouse that holds up to 8 boxes of goods.
-  Every day, customers want to buy 2 boxes.
-  
-  You must decide: "How many boxes should I order today?"
-  Your choices (Actions): Order 0, 2, 4, or 6 boxes.
-  
-  The twist:
-    - If world is Normal: 100% of your order arrives safely.
-    - If world is in Congestion: Only 50% arrives (half gets delayed).
-    - If world is in Crisis: 0% arrives (stuck at customs / tariffs).
+WHAT THIS DOES:
+  Manages a warehouse holding up to 8 boxes of electronics imported from Jebel Ali to Hamburg.
+  Daily customer demand averages 2 boxes.
 
-COSTS YOU WANT TO MINIMIZE:
-  1. Ordering Cost: $4 per box ordered.
-  2. Holding Cost: $1 per unsold box stored in warehouse overnight.
-  3. Stockout Penalty: $30 per box if customers want to buy and warehouse is empty!
-  4. Tariff Fee: Extra $4 per box if ordering during a Crisis.
+  States: (Inventory I in {0..8}, Corridor Risk State s in {Normal, Congestion, Crisis})
+  Actions: Order a in {0, 2, 4, 6} boxes.
+
+  Delivery arrival rate along vulnerable corridors:
+    - Normal (s=0):     100% arrives
+    - Congestion (s=1):  50% arrives
+    - Crisis (s=2):      25% arrives (severe chokepoint blockage)
+
+COSTS TO MINIMIZE:
+  - Procurement + Tariff: ($4 + tariff_per_box) per box ordered (known policy input)
+  - Holding Cost:         $1 per box remaining at end of day
+  - Stockout Penalty:     $30 per unfulfilled unit of daily demand
 
 ALGORITHM: Bellman Value Iteration
-  We compute the expected total cost for each (Inventory, RiskState) pair,
-  and find the best order action that minimizes:
-    Total Cost = Today's Immediate Cost + (0.90 * Expected Future Cost Tomorrow)
+  V(I, s) = min_a [ immediate_cost(I, s, a) + gamma * sum_{s'} P(s'|s) V(I', s') ]
 """
 
+from typing import Any, Dict, Tuple
 import numpy as np
 
 
 class SimpleInventoryMDP:
-    """Solves for the optimal inventory reordering policy using Value Iteration."""
+    """Solves for the optimal inventory reordering policy using Bellman Value Iteration."""
 
-    def __init__(self, max_inventory: int = 8, discount_factor: float = 0.90):
+    def __init__(
+        self,
+        max_inventory: int = 8,
+        discount_factor: float = 0.90,
+        tariff_per_box: float = 2.0,
+    ):
         self.max_inventory = max_inventory
         self.gamma = discount_factor
+        self.tariff_per_box = float(tariff_per_box)
 
-        # Order choices available to the manager
         self.actions = [0, 2, 4, 6]
-
-        # Daily customer demand (averages 2 boxes per day)
         self.daily_demand = 2
 
-        # Costs
+        # Cost parameters (USD)
         self.cost_per_item = 4.0
         self.holding_cost_per_item = 1.0
         self.stockout_penalty = 30.0
-        self.tariff_extra_cost = 4.0
 
         # Delivery arrival rate based on corridor state:
-        # Normal -> 1.0 (100% arrives), Congestion -> 0.5 (50%), Crisis -> 0.0 (0%)
-        self.delivery_success = {0: 1.0, 1: 0.5, 2: 0.0}
+        # Normal -> 1.0 (100%), Congestion -> 0.5 (50%), Crisis -> 0.25 (25%)
+        self.delivery_success = {0: 1.0, 1: 0.5, 2: 0.25}
 
-        # Transition probabilities between states (from HMM transition matrix)
+        # State transition matrix P(s' | s), matching SimpleHMM.A
         self.state_transitions = [
             [0.85, 0.12, 0.03],  # From Normal
             [0.20, 0.70, 0.10],  # From Congestion
             [0.05, 0.25, 0.70],  # From Crisis
         ]
 
-        # Value table V[inventory, state] and Policy table policy[inventory, state]
         self.V = np.zeros((self.max_inventory + 1, 3))
         self.policy = np.zeros((self.max_inventory + 1, 3), dtype=int)
+        self.iterations_used = 0
+
+    def get_next_inventory(self, current_inv: int, state: int, action: int) -> int:
+        """Determines tomorrow's starting inventory level after arrivals and demand."""
+        arrived = int(round(action * self.delivery_success[state]))
+        stock_available = current_inv + arrived
+        sold = min(self.daily_demand, stock_available)
+        return min(self.max_inventory, stock_available - sold)
+
+    def q_value_breakdown(
+        self, current_inv: int, state: int, action: int
+    ) -> Dict[str, Any]:
+        """
+        Computes full Bellman Q(I, s, a) cost breakdown for a single (inventory, state, action).
+        """
+        order_cost = (self.cost_per_item + self.tariff_per_box) * action
+        arrived = int(round(action * self.delivery_success[state]))
+        stock_available = current_inv + arrived
+        sold = min(self.daily_demand, stock_available)
+        shortage = self.daily_demand - sold
+        next_inv = min(self.max_inventory, stock_available - sold)
+
+        holding = self.holding_cost_per_item * next_inv
+        stockout_cost = self.stockout_penalty * shortage
+        immediate = order_cost + holding + stockout_cost
+
+        future = self.gamma * sum(
+            self.state_transitions[state][ns] * float(self.V[next_inv, ns])
+            for ns in range(3)
+        )
+        total = immediate + future
+
+        return {
+            "action": action,
+            "order_cost": float(order_cost),
+            "arrived": arrived,
+            "next_inv": next_inv,
+            "holding": float(holding),
+            "shortage": shortage,
+            "stockout_cost": float(stockout_cost),
+            "immediate": float(immediate),
+            "future": float(future),
+            "total": float(total),
+        }
 
     def calculate_cost(self, current_inv: int, state: int, action: int) -> float:
         """Calculates today's immediate cost for taking an action."""
-        # 1. Purchase cost
-        purchase_cost = self.cost_per_item * action
-        if state == 2:  # Tariff crisis surcharge
-            purchase_cost += self.tariff_extra_cost * action
+        return self.q_value_breakdown(current_inv, state, action)["immediate"]
 
-        # 2. How many items actually arrive at the warehouse today?
-        arrived = int(round(action * self.delivery_success[state]))
-        stock_available = current_inv + arrived
-
-        # 3. Customer demand fulfillment
-        if stock_available >= self.daily_demand:
-            unsold = stock_available - self.daily_demand
-            stockout_items = 0
-        else:
-            unsold = 0
-            stockout_items = self.daily_demand - stock_available
-
-        # 4. Warehouse holding cost & stockout penalties
-        ending_inv = min(self.max_inventory, unsold)
-        holding_cost = self.holding_cost_per_item * ending_inv
-        penalty_cost = self.stockout_penalty * stockout_items
-
-        return purchase_cost + holding_cost + penalty_cost
-
-    def get_next_inventory(self, current_inv: int, state: int, action: int) -> int:
-        """Determines tomorrow's starting inventory level."""
-        arrived = int(round(action * self.delivery_success[state]))
-        stock_available = current_inv + arrived
-        ending_inv = max(0, stock_available - self.daily_demand)
-        return min(self.max_inventory, ending_inv)
-
-    def solve_value_iteration(self, max_iterations: int = 100, tolerance: float = 0.01):
+    def solve_value_iteration(
+        self, max_iterations: int = 500, tolerance: float = 1e-3
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Solves the Bellman equation by repeating until the values stop changing:
-          V(s) = min_a [ Cost(s, a) + gamma * Expected_V(next_s) ]
+        Solves the Bellman optimality equation via Value Iteration until convergence.
         """
-        for iteration in range(max_iterations):
+        self.V = np.zeros((self.max_inventory + 1, 3))
+        self.policy = np.zeros((self.max_inventory + 1, 3), dtype=int)
+        self.iterations_used = 0
+
+        for iteration in range(1, max_iterations + 1):
             max_change = 0.0
             new_V = np.zeros_like(self.V)
 
-            # Loop through all inventory levels (0 to 8)
             for inv in range(self.max_inventory + 1):
-                # Loop through all 3 states (Normal, Congestion, Crisis)
                 for s in range(3):
-                    costs_for_each_action = []
-
-                    for a in self.actions:
-                        # 1. Today's immediate cost
-                        today_cost = self.calculate_cost(inv, s, a)
-
-                        # 2. Next inventory level
-                        next_inv = self.get_next_inventory(inv, s, a)
-
-                        # 3. Tomorrow's expected future cost across possible tomorrow states
-                        future_cost = 0.0
-                        for next_s in range(3):
-                            prob = self.state_transitions[s][next_s]
-                            future_cost += prob * self.V[next_inv, next_s]
-
-                        total_cost = today_cost + self.gamma * future_cost
-                        costs_for_each_action.append(total_cost)
-
-                    # Pick the action that gives the lowest total cost!
-                    best_cost = min(costs_for_each_action)
-                    best_action_index = int(np.argmin(costs_for_each_action))
+                    q_values = [
+                        self.q_value_breakdown(inv, s, a)["total"] for a in self.actions
+                    ]
+                    best_idx = int(np.argmin(q_values))
+                    best_cost = q_values[best_idx]
 
                     new_V[inv, s] = best_cost
-                    self.policy[inv, s] = self.actions[best_action_index]
+                    self.policy[inv, s] = self.actions[best_idx]
 
                     change = abs(new_V[inv, s] - self.V[inv, s])
                     if change > max_change:
                         max_change = change
 
             self.V = new_V
+            self.iterations_used = iteration
             if max_change < tolerance:
                 break
 
@@ -147,11 +149,11 @@ class SimpleInventoryMDP:
 
     def get_urgency_score(self, current_inv: int) -> float:
         """
-        Passes a simple Urgency Score between 0.0 and 1.0 to Algorithm 3 (A* Router).
-        - If inventory is 0: Urgency is 1.0 (CRITICAL! Need goods immediately!)
-        - If inventory is 1: Urgency is 0.7 (HIGH)
-        - If inventory is 2: Urgency is 0.4 (MEDIUM)
-        - If inventory >= 3: Urgency is 0.0 (LOW, plenty in stock)
+        Passes an Urgency Score between 0.0 and 1.0 to Dynamic A* Search:
+          - 0 boxes -> 1.0 (CRITICAL)
+          - 1 box   -> 0.7 (HIGH)
+          - 2 boxes -> 0.4 (MEDIUM)
+          - >= 3    -> 0.0 (LOW)
         """
         if current_inv == 0:
             return 1.0

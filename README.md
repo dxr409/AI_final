@@ -1,25 +1,27 @@
 # Supply Chain Vulnerability & Tariff Disruption Advisory System
 **AI Fundamentals University Course Final Project**
 
-An end-to-end, integrated decision-support tool that combines three core algorithm families from artificial intelligence:
-1. **Hidden Markov Model (HMM)** — *Probabilistic Reasoning / Temporal Models*: Infers latent risk states of international transit corridors from noisy operational signals (freight rates and dwell delays).
-2. **Markov Decision Process (MDP)** — *Sequential Decision Making under Uncertainty*: Optimizes warehouse replenishment policies via Bellman Value Iteration under disruption-dependent fulfillment rates and tariff shocks.
-3. **Dynamic A\* Search** — *Classical Search & Path Planning*: Plans cost-minimal multimodal freight paths across a 6-node global transit network, dynamically penalizing chokepoints by HMM disruption beliefs and transit latency by MDP stockout urgency.
+An end-to-end, 100% offline decision-support application for **Jebel Ali (Dubai) → Hamburg** logistics that integrates three core AI algorithm families:
+1. **Hidden Markov Model (HMM)** — *Probabilistic Reasoning / Temporal Models*: Infers latent corridor risk states *(Normal, Congestion, Crisis)* from noisy delay/rate observations via Forward filtering.
+2. **Markov Decision Process (MDP)** — *Sequential Decision-Making under Uncertainty*: Computes cost-optimal warehouse replenishment policies via Bellman Value Iteration under known import tariffs and state-dependent delivery rates.
+3. **Dynamic A\* Search** — *Classical Search & Heuristics*: Plans cost-minimal multimodal routes across a 7-node network *(Strait of Hormuz, Salalah Overland Bypass, Suez Canal, Cape of Good Hope, Dubai Air Cargo)* using a provably admissible great-circle heuristic.
 
 ---
 
 ## 📁 Repository Structure
 ```
 supply_chain_advisory/
-├── data_loader.py            # Simple scenario generator
-├── hmm_module.py             # Pure Python/NumPy Forward algorithm (Risk Detector)
-├── mdp_planner.py            # Bellman Value Iteration solver (Order Planner)
-├── graph_search.py           # Dynamic multimodal A* search (Route Finder)
-├── simulation_runner.py      # Clean terminal pipeline runner for presentation
-├── app.py                    # Interactive Streamlit dashboard with 2D network visualizer
-├── test_pipeline.py          # Automated verification test suite
-├── STUDENT_DEFENSE_GUIDE.md  # 30-sec pitch, teacher Q&A, and oral defense guide
-├── MATH_DOCUMENTATION.md     # Clear, student-friendly mathematical formulas
+├── data_loader.py            # Scenario generator (all_clear, tariff_surge, hormuz_blockage) & UI presets
+├── hmm_module.py             # Forward filtering algorithm & scalar risk mapping
+├── mdp_planner.py            # Bellman Value Iteration warehouse optimizer + Q-value breakdown
+├── graph_search.py           # 7-node Jebel Ali -> Hamburg multimodal network & admissible A* search
+├── simulation_runner.py      # Closed-loop AI vs baseline simulator & terminal presentation runner
+├── map_view.py               # Offline SVG map with coastlines, waypoints, and animated trailing lines
+├── ui_components.py          # Interactive formula explorer with synchronized variable highlighting
+├── app.py                    # Interactive Streamlit dashboard (offline)
+├── test_pipeline.py          # 5-suite automated verification tests
+├── MATH_DOCUMENTATION.md     # Mathematical equations and proofs
+├── STUDENT_DEFENSE_GUIDE.md  # Oral defense pitch, Q&A, and live demo script
 └── requirements.txt          # Python dependency manifest
 ```
 
@@ -27,23 +29,29 @@ supply_chain_advisory/
 
 ## 🚀 Quickstart Guide
 
-### 1. Run the Headless Pipeline Simulation
+### Activate Virtual Environment
 ```bash
-python3 simulation_runner.py
+cd "/Users/derlyight/Documents/antgrav files/supply_chain_advisory"
+source .venv/bin/activate
 ```
-This executes the end-to-end pipeline, prints the MDP optimal policy matrix, outputs A* route choices before and after shocks, and traces day-by-day closed-loop operations.
 
-### 2. Run Verification Tests
+### 1. Run Verification Tests
 ```bash
-python3 test_pipeline.py
+python test_pipeline.py
 ```
-Validates mathematical admissibility of the A* heuristic, HMM belief vector normalization, and MDP Value Iteration convergence.
+Validates HMM probability normalization & purity, MDP Bellman Q-value identities, A\* rerouting across all 5 regimes, heuristic admissibility ($h(n) \le h^*(n)$), and ground-truth closed-loop simulation.
+
+### 2. Run Headless Terminal Simulation
+```bash
+python simulation_runner.py
+```
+Prints the solved MDP policy table, A\* route selection across the 3 scenario presets, and 15-day AI-vs-Baseline benchmarks.
 
 ### 3. Launch Interactive Streamlit Dashboard
 ```bash
-./.venv/bin/streamlit run app.py
+streamlit run app.py
 ```
-Navigate to `http://localhost:8501` to view live time-series plots, interactive policy tables, and dynamic path visualizations.
-
-### 4. Preparing for Your Presentation & Defense
-Read [`STUDENT_DEFENSE_GUIDE.md`](file:///Users/derlyight/Documents/antgrav%20files/supply_chain_advisory/STUDENT_DEFENSE_GUIDE.md) for the 30-second elevator pitch and answers to the top 5 questions your teacher will ask.
+Navigate to `http://localhost:8501` to explore:
+- **Route Map** with preset buttons (*All Clear*, *Tariff Surge*, *Hormuz Blockage*) and animated cargo trajectories
+- **Calculations Tab** with hover-highlighted interactive formulas showing every live number
+- **Order Policy (MDP)**, **Simulation & Results**, and **How it works** pipeline diagram

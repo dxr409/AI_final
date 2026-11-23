@@ -3,97 +3,115 @@ hmm_module.py - Hidden Markov Model (HMM)
 =========================================
 Topic: Probabilistic Reasoning & Temporal Models
 
-WHAT THIS DOES IN SIMPLE WORDS:
-  We want to know: "Is the shipping corridor in Normal, Congestion, or Crisis state?"
-  We cannot see the true state directly, but each day we observe shipping signals:
-    0: Cheap & On-Time
-    1: Moderate Delay
-    2: Expensive & Stuck
+Infers the hidden shipping corridor state (Normal, Congestion, Crisis)
+from noisy daily operational signals:
+  0: Cheap & On-Time
+  1: Moderate Delay
+  2: Expensive & Stuck
 
-  The Forward Algorithm updates our belief vector [P(Normal), P(Congestion), P(Crisis)]
-  after each new observation using basic probability.
-
-THE TWO MATRICES:
-  1. Transition Matrix A (How the world changes day-to-day):
-       A[i][j] = Probability of going from State i today to State j tomorrow.
-  2. Emission Matrix B (What we see in each state):
-       B[j][k] = Probability of seeing Observation k when in State j.
-
-THE 2-LINE UPDATE RULE:
-  Step 1: predicted = previous_belief @ A
-  Step 2: unnormalized = predicted * B[:, observation]
-  Step 3: belief = unnormalized / sum(unnormalized)   # makes it add up to 100%
+Runs exact Forward Filtering:
+  1. predicted = prev_belief @ A
+  2. unnormalized = predicted * B[:, observation]
+  3. posterior = unnormalized / sum(unnormalized)
 """
 
+from typing import Any, Dict
 import numpy as np
+
+
+def risk_to_state(p: float) -> int:
+    """
+    Maps scalar disruption risk p = 0.4 * P(Congestion) + 1.0 * P(Crisis)
+    to discrete MDP risk states using midpoints between pure-state p values (0.0, 0.4, 1.0).
+    Used when driving the interactive dashboard directly from the risk slider.
+    """
+    if p < 0.2:
+        return 0
+    elif p < 0.7:
+        return 1
+    else:
+        return 2
 
 
 class SimpleHMM:
     """Hidden Markov Model for estimating shipping disruption risk."""
 
     STATE_NAMES = ["Normal", "Congestion", "Crisis"]
+    OBS_NAMES = ["Cheap & On-Time", "Moderate Delay", "Expensive & Stuck"]
 
     def __init__(self):
-        # Initial belief: We assume day 1 starts mostly Normal
-        # [80% Normal, 15% Congestion, 5% Crisis]
-        self.initial_belief = np.array([0.80, 0.15, 0.05])
+        # Initial belief: [80% Normal, 15% Congestion, 5% Crisis]
+        self.initial_belief = np.array([0.80, 0.15, 0.05], dtype=float)
 
         # Transition Matrix A: P(Tomorrow | Today)
-        # Rows = Today's state, Columns = Tomorrow's state
-        self.A = np.array([
-            # Tomorrow: Normal  Congestion  Crisis
-            [0.85, 0.12, 0.03],  # Today is Normal
-            [0.20, 0.70, 0.10],  # Today is Congestion
-            [0.05, 0.25, 0.70],  # Today is Crisis
-        ])
+        self.A = np.array(
+            [
+                # Tomorrow: Normal  Congestion  Crisis
+                [0.85, 0.12, 0.03],  # Today is Normal
+                [0.20, 0.70, 0.10],  # Today is Congestion
+                [0.05, 0.25, 0.70],  # Today is Crisis
+            ],
+            dtype=float,
+        )
 
         # Emission Matrix B: P(Observation | Current State)
-        # Rows = Hidden state, Columns = Observation (0: Good, 1: Delayed, 2: Stuck)
-        self.B = np.array([
-            # Obs: Good  Delayed  Stuck
-            [0.80, 0.15, 0.05],  # In Normal state
-            [0.10, 0.70, 0.20],  # In Congestion state
-            [0.05, 0.25, 0.70],  # In Crisis state
-        ])
+        self.B = np.array(
+            [
+                # Obs: Good  Delayed  Stuck
+                [0.80, 0.15, 0.05],  # In Normal state
+                [0.10, 0.70, 0.20],  # In Congestion state
+                [0.05, 0.25, 0.70],  # In Crisis state
+            ],
+            dtype=float,
+        )
 
         self.current_belief = self.initial_belief.copy()
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset belief to the beginning of the simulation."""
         self.current_belief = self.initial_belief.copy()
 
-    def update_belief(self, observation: int) -> np.ndarray:
+    def forward_step_details(
+        self, prev_belief: np.ndarray, observation: int
+    ) -> Dict[str, Any]:
         """
-        Runs one step of the Forward Algorithm for a new observation.
-        Returns: belief vector [P(Normal), P(Congestion), P(Crisis)].
+        Pure forward filtering step returning all intermediate vectors:
+        predicted, likelihood, unnormalized, Z, and posterior.
         """
-        # Step 1: Predict what state we might be in today based on yesterday's belief
-        # (Matrix multiplication: belief vector times transition matrix)
-        predicted_state = self.current_belief @ self.A
-
-        # Step 2: Multiply by the chance of seeing what we actually observed
-        likelihood = self.B[:, observation]
-        updated_belief = predicted_state * likelihood
-
-        # Step 3: Normalize so the 3 probabilities sum up to 1.0 (100%)
-        total = np.sum(updated_belief)
-        if total > 0:
-            self.current_belief = updated_belief / total
+        prev = np.asarray(prev_belief, dtype=float)
+        predicted = prev @ self.A
+        likelihood = self.B[:, observation].copy()
+        unnormalized = predicted * likelihood
+        Z = float(np.sum(unnormalized))
+        if Z > 0.0:
+            posterior = unnormalized / Z
         else:
-            self.current_belief = np.array([0.33, 0.33, 0.34])
+            posterior = np.array([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0], dtype=float)
+            Z = 1.0
 
+        return {
+            "predicted": predicted,
+            "likelihood": likelihood,
+            "unnormalized": unnormalized,
+            "Z": Z,
+            "posterior": posterior,
+        }
+
+    def update_belief(self, observation: int) -> np.ndarray:
+        """Runs one step of the Forward Algorithm and updates current_belief."""
+        details = self.forward_step_details(self.current_belief, observation)
+        self.current_belief = details["posterior"].copy()
         return self.current_belief
 
     def get_disruption_probability(self) -> float:
         """
-        Single number between 0.0 (safe) and 1.0 (disrupted) passed to A* router.
-        Combines congestion (weighted 0.4) and crisis (weighted 1.0).
+        Single scalar between 0.0 (safe) and 1.0 (disrupted) passed to A* router:
+          p = 0.4 * P(Congestion) + 1.0 * P(Crisis)
         """
-        p_normal = self.current_belief[0]
-        p_congestion = self.current_belief[1]
-        p_crisis = self.current_belief[2]
+        p_congestion = float(self.current_belief[1])
+        p_crisis = float(self.current_belief[2])
         return float(0.4 * p_congestion + 1.0 * p_crisis)
 
     def get_most_likely_state(self) -> int:
-        """Returns the state with the highest probability (0, 1, or 2)."""
+        """Returns the state with the highest posterior probability (0, 1, or 2)."""
         return int(np.argmax(self.current_belief))

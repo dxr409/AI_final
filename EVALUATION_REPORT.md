@@ -1,14 +1,14 @@
 # Experimental Evaluation & Advisory Report
 ## Supply Chain Vulnerability & Tariff Disruption Advisory System
 
-**Course**: AI Fundamentals Final Project  
-**Author**: Antigravity AI Engineering Suite  
+**Course**: AI Fundamentals  
+**Authors**: Sailau Imangali & Meirgaliev Nurtay
 **Date**: October 2026  
 
 ---
 
 ## 1. Executive Summary
-Global supply chains represent complex, interconnected stochastic dynamical systems vulnerable to rapid regime changes (such as geopolitical tariff surges, canal chokepoint blockages, and port labour bottlenecks). Standard static planning tools fail because they decouple operational state inference from inventory replenishment and multimodal freight routing.
+Global supply chains represent complex, interconnected stochastic dynamical systems vulnerable to rapid regime changes (such as geopolitical tariff surges and canal chokepoint blockages, as we saw in war of USA with Iran and the latter's action to counteract). Standard static planning tools fail because they decouple operational state inference from inventory replenishment and multimodal freight routing.
 
 This project delivers a functional, end-to-end decision-support architecture uniting **three distinct algorithm families**:
 1. **Temporal Probabilistic Reasoning**: Hidden Markov Model (HMM) with pure NumPy Forward belief filtering.
